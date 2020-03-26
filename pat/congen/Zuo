@@ -1,0 +1,37 @@
+
+MYBIN=/usr/local/my/bin
+
+.PHONY : install
+install : $(MYBIN)/zuo
+uname=$(shell uname)
+
+$(MYBIN)/zuo : cache/bin/zuo
+  sudo cp $<  $@
+  sudo chown root $@ 
+ifeq ($(uname),Darwin)
+  sudo chgrp wheel $@ 
+else
+  sudo chgrp root $@ 
+endif
+  sudo chmod 0755 $@ 
+  
+.PHONY : distclean clean
+clean : ; rm -f cache/bin/zuo
+distclean : ; sudo rm -f $(MYBIN)/zuo
+
+cache/bin/zuo : py/zuo.py py/bloc.py py/zuocom.py py/comset.py
+  echo "#!/usr/bin/env python3" > $@
+  echo "" >> $@
+  echo "# Section 1." >> $@
+  PYTHONPATH=$$PYTHONPATH:. py/zuo.py py/bloc.py "*" >> $@
+  echo "" >> $@
+  echo "# Section 2." >> $@
+  PYTHONPATH=$$PYTHONPATH:. py/zuo.py py/zuocom.py "*" >> $@
+  echo "" >> $@
+  echo "# Section 3." >> $@
+  PYTHONPATH=$$PYTHONPATH:. py/zuocom.py  >> $@
+  echo "" >> $@
+
+Makefile : Zuo
+  PYTHONPATH=$$PYTHONPATH:. py/zuo.py -f $< > $@
+

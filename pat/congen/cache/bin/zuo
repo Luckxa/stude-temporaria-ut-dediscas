@@ -1,0 +1,955 @@
+#!/usr/bin/env python3
+
+# Section 1.
+class stac :
+
+
+  def __init__(ipse) :
+    ipse.__a =[]
+
+
+  def __len__(ipse) :
+    return len(ipse.__a)
+
+
+  def push(ipse, x) :
+    ipse.__a.append(x)
+
+
+  def pop(ipse) :
+    x =ipse.__a[-1]
+    del ipse.__a[-1]
+    return x
+
+
+  def top(ipse) :
+    return ipse.__a[-1]
+class csglob :
+
+
+  def __init__(ipse, pat) :
+    ipse.start =0b1
+    ipse.star =0b0
+    charset =set()
+    for p,i in enumerate(pat) :
+      if i == ',' :
+        ipse.start |=0b10<<p
+      elif i == '*' :
+        ipse.star |=(0b1<<p)
+      else :
+        charset.add(i)
+    ipse.charset =['\0', '\1'] + sorted(charset)
+    ipse.pat =pat+'\0'
+    ipse.subset ={}
+    de =ipse.compat(ipse.start)
+    while de :
+      ad =set()
+      for d in de :
+        ad |=ipse.compat(d)
+      de =ad
+
+
+  def compat(ipse, r) :
+    star =r & ipse.star
+    s =(r & ~star) | star<<1
+    ipse.subset[r] =[ipse.compati(s, ',') | ipse.compati(s, '\0')]
+    ipse.subset[r] +=[ipse.compati(s, i) | star for i in ipse.charset[1:]]
+    de =set()
+    for d in ipse.subset[r] :
+      if d not in ipse.subset.keys() :
+        de.add(d)
+    return de
+
+
+  def compati(ipse, r, i, star=False) :
+    t =0
+    for p in range(len(ipse.pat)) :
+      if 0b01<<p & r and ipse.pat[p] == i :
+        t |=0b10<<p
+    return t
+
+
+  def __call__(ipse, l) :
+    r =ipse.start
+    t =0b0
+    for c in l :
+      for i in range(len(ipse.charset)-1, 0, -1) :
+        if ipse.charset[i] == c : break
+      r =ipse.subset[r][i]
+    return bool(ipse.subset[r][0])
+class stacarbor (stac) :
+
+
+  def __init__(ipse, comment=None) :
+    super().__init__()
+    ipse.comment =comment
+
+
+  def error(ipse, msg) :
+    print(msg)
+    exit(1)
+
+
+  def __call__(ipse, inputiter, fasc, pos) :
+
+
+    def resettabs(l) :
+      for i in range(len(l)) :
+        if not l[i].isspace() :
+          return l[:i], l[i:]
+      return l,""
+
+    fragcont =None
+    i =0
+    for l in inputiter :
+      i +=1
+      pos(i)
+      if len(l)>1 and l[-2] == '\\' :
+        fragcont =l
+        continue
+      if fragcont != None :
+        l =fragcont + l
+        fragcont =None
+      if i == 1 :
+        ipse.push('')
+        fasc("pushunit", None)
+        fasc("push", "")
+      tabs,frag =resettabs(l.rstrip())
+      if not frag or ipse.comment != None and ipse.comment(l) and (len(tabs) == 0 or tabs != ipse.top()) :
+        fasc("comment", frag)
+      else :
+        while len(tabs) < len(ipse.top()) :
+          if ipse.top()[:len(tabs)] != tabs :
+            ipse.error("%d : '%s' : (pop) inconsistentes numeri tablationum"%(i+1, l))
+          ipse.pop()
+          fasc("pop", None)
+        if tabs != ipse.top() :
+          if len(tabs) > len(ipse.top()) :
+            if tabs[:len(ipse.top())] != ipse.top() :
+              ipse.error("%d : '%s' : (push) inconsistentes numeri tablationum"%(i+1, l))
+            ipse.push(tabs)
+            fasc("push", frag)
+          else :
+            ipse.error("%d : '%s' : inconsistentes numeri tablationum"%(i+1, l))
+        else :
+          fasc("frag", frag)
+    while len(ipse) :
+      ipse.pop()
+      fasc("pop", None)
+    fasc("popunit", None)
+class blocarbor(stac) :
+
+
+  def error(ipse, msg) :
+    print("%s:%d: %s"%(ipse.unitnom, ipse.lnum, msg))
+    exit(1)
+
+
+  def pos(ipse, lnum) :
+    ipse.lnum =lnum
+
+
+  def arbor(ipse, iterinput, comment="") :
+    ipse.unitnom ="*"
+    stacarbor(comment=csglob(comment))(iterinput, ipse.fasc, ipse.pos)
+    return ipse.radix
+
+
+  def unitarbor(ipse, unitnom, comment="") :
+    ipse.unitnom =unitnom
+    return ipse.arbor(open(unitnom), comment)
+class mkarbor(blocarbor) :
+
+
+  def __call__(ipse, iterinput) :
+    return ipse.arbor(iterinput)
+
+
+  def unit(ipse, unitnom) :
+    return ipse.unitarbor(unitnom, "#*,*##,--*")
+
+
+  def fasc(ipse, e, data) :
+    if e == "pushunit" :
+      ipse.push({"clav" : "", "bloc":[{'clav':'cap', 'data':"unit :"}]})
+    elif e == "push" :
+      clav =value =""
+      udata =ipse.top()["bloc"][-1]['data']
+      if udata :
+        i =0
+        while len(udata)>i and udata[i] not in ('(', ':') and not udata[i].isspace() :
+          i +=1
+        clav =udata[:i]
+        if clav in ("unit", "define", "endef", "ifeq", "ifneq", "ifdef", "else", "endif") :
+          value =""
+        else :
+          clav ="dep"
+          value =udata
+      ipse.push({"clav":clav, "nom":value, "bloc":[{'clav':'cap', 'data':udata}, {'clav':'frag', 'data':data}]})
+    elif e == "frag" :
+      ipse.top()["bloc"].append({'clav':'frag', 'data':data})
+    elif e == "pop" :
+      data =ipse.pop()
+      if data["clav"] == "unit" :
+        ipse.radix =data
+      ipse.top()["bloc"][-1] =data
+    elif e == "comment" :
+      pass
+    elif e == "popunit" :
+      ipse.pop()
+class pyarbor(blocarbor) :
+
+
+  def __call__(ipse, iterinput) :
+    return ipse.arbor(iterinput, "#*,*##,//*")
+
+
+  def unit(ipse, unitnom) :
+    return ipse.unitarbor(unitnom, "#*,*##,//*")
+
+
+  def fasc(ipse, e, data) :
+    if e == "pushunit" :
+      ipse.push({"clav" : "", "bloc":[{'clav':'cap', 'data':"unit :"}]})
+    elif e == "push" :
+      clav =value =""
+      try : udata =ipse.top()["bloc"][-1]['data']
+      except Exception as e : ipse.error(e)
+      if udata :
+        i =0
+        while udata[i] not in ('(', ':') and not udata[i].isspace() :
+          i +=1
+        clav =udata[:i]
+        if clav in ("for", "while", "if", "elif", "else") :
+          value =""
+        elif clav in ("def", "class") :
+          while udata[i].isspace() :
+            i +=1
+          j =i
+          while udata[j] not in ('(', ':') and not udata[j].isspace() :
+            j +=1
+          value =udata[i:j]
+        elif clav == "unit" :
+          value =ipse.unitnom
+        else :
+          ipse.error("irrecognita clavis '%s'"%clav)
+      ipse.push({"clav":clav, "nom":value, "bloc":[{'clav':'cap', 'data':udata}, {'clav':'frag', 'data':data}]})
+    elif e == "frag" :
+      ipse.top()["bloc"].append({'clav':'frag', 'data':data})
+    elif e == "pop" :
+      data =ipse.pop()
+      if data["clav"] == "unit" :
+        ipse.radix =data
+      ipse.top()["bloc"][-1] =data
+    elif e == "comment" :
+      pass
+    elif e == "popunit" :
+      ipse.pop()
+class unitbloc :
+
+
+  def __init__(ipse, ba) :
+    ipse.__unit ={}
+    ipse.ba =ba
+
+
+  def radix(ipse, nom, iterinput=None) :
+    if nom not in ipse.__unit :
+      if iterinput == None :
+        ipse.__unit[nom] =ipse.ba.unit(nom)
+      else :
+        ipse.__unit[nom] =ipse.ba(iterinput)
+    return ipse.__unit[nom]
+class unitmkbloc (unitbloc) :
+
+
+  def __init__(ipse) :
+    super().__init__(mkarbor())
+    ipse.__unit ={}
+
+
+  def item(ipse, nom, iterinput=None) :
+    if nom not in ipse.__unit :
+      ipse.__unit[nom] ={}
+      for l in ipse.radix(nom, iterinput)["bloc"][1:] :
+        if l["clav"] == "dep" :
+          ipse.__unit[nom][l["nom"]] =l["bloc"]
+    return ipse.__unit[nom].items()
+class unitpybloc (unitbloc) :
+
+
+  def __init__(ipse) :
+    super().__init__(pyarbor())
+    ipse.__unit ={}
+
+
+  def item(ipse, nom, iterinput=None) :
+    if nom not in ipse.__unit :
+      ipse.__unit[nom] ={}
+      for l in ipse.radix(nom, iterinput)["bloc"][1:] :
+        if l["clav"] in ("class", "def") :
+          ipse.__unit[nom][l["nom"]] =l["bloc"]
+    return ipse.__unit[nom].items()
+class pyecho :
+
+
+  def __init__(ipse, pat, de ,ad=None) :
+    ipse.glob =csglob(pat)
+    ipse.de =de
+    ipse.ad =ad
+    ipse.globals ={}
+
+
+  def __call__(ipse, s) :
+    if ipse.glob(s) :
+      if ipse.ad == None :
+        return exec(s[ipse.de:], ipse.globals)
+      else :
+        return exec(s[ipse.de:ipse.ad], ipse.globals)
+    else :
+      return s
+class pmunit :
+
+
+  def write(ipse, out, data, tabshft) :
+
+
+    def f(data, tabshft, spatpre=0) :
+      if data['clav'] in ipse.spatpost :
+        spatpost =ipse.spatpost[data['clav']]
+      else :
+        spatpost =0
+      if data['clav'] in ipse.spatpre :
+        spatpre =max(spatpre, ipse.spatpre[data['clav']])
+      if 'bloc' not in data and spatpre != 0 :
+        out.write('\n' * spatpre)
+      if data['clav'] == 'cap' :
+        if tabshft >= 0 :
+          out.write(ipse.tabchr*(ipse.tabshft+tabshft) + data['data'] + '\n')
+      elif data['clav'] == 'frag' :
+        out.write(ipse.tabchr*(ipse.tabshft+tabshft+1) + ipse.pyecho(data['data']) + '\n')
+      elif 'bloc' in data :
+        for i,x in enumerate(data['bloc']) :
+          if i == len(data['bloc']) - 1 :
+            spatpost =max(spatpost, f(x, tabshft+1, spatpre))
+          else :
+            spatpre =f(x, tabshft+1, spatpre)
+      return spatpost
+
+    f(data, tabshft)
+
+
+  def writeradix(ipse, out, unitnom, inputiter=None) :
+    ipse.write( out, ipse.ub.radix(unitnom, inputiter), -2 )
+
+
+  def writeitem(ipse, out, itnom, unitnom, inputiter=None, tabshft=0) :
+    itglob =csglob(itnom)
+    for clav,blc in ipse.ub.item(unitnom, inputiter) :
+      if itglob(clav) :
+        for data in blc :
+          ipse.write(out, data, tabshft)
+
+
+  def ls(ipse, unitnom, inputiter=None) :
+    return tuple(k for k,v in ipse.ub.item(unitnom, inputiter))
+
+
+  def cap(ipse, itnom, unitnom, inputiter=None) :
+    for k,v in ipse.ub.item(unitnom, inputiter) :
+      if k == itnom :
+        s =v[0]['data']
+        return s.rstrip()[:-1].rstrip()
+class unitpy (pmunit) :
+
+
+  def __init__(ipse, tabchr="  ", tabshft=0) :
+    ipse.ub =unitpybloc()
+    ipse.tabchr =tabchr
+    ipse.tabshft =tabshft
+    ipse.spatpre ={"def":2, "class":3}
+    ipse.spatpost ={"def":1, "class":2}
+    ipse.pyecho =pyecho("#echo *", 6)
+class unitmk (pmunit) :
+
+
+  def __init__(ipse, tabchr="\t", tabshft=0) :
+    ipse.ub =unitmkbloc()
+    ipse.tabchr =tabchr
+    ipse.tabshft =tabshft
+    ipse.spatpre ={} # "dep",
+    ipse.spatpost ={} #"dep",
+    ipse.pyecho =pyecho("#echo *", 6)
+
+# Section 2.
+def zuo_vim(opt) :
+  pass
+def zuo_py(opt) :
+  from sys import stdout
+
+
+  def fpy(fnom) :
+    if len(opt['args']) == 0 :
+      unitpy().writeradix(stdout, fnom)
+    else :
+      for a in opt['args'] :
+        unitpy().writeitem(stdout, fnom, a)
+  for a in opt['f'] if len(opt['f']) else ['Zuo'] :
+    fpy(a)
+def zuo_main(opt) :
+  from sys import stdout
+
+
+  def fmk(fnom) :
+    if len(opt['args']) == 0 :
+      unitmk().writeradix(stdout, fnom)
+    else :
+      for a in opt['args'] :
+        unitmk().writeitem(stdout, fnom, a)
+  for a in opt['f'] if len(opt['f']) else ['Zuo'] :
+    fmk(a)
+
+# Section 3.
+#!/usr/bin/env python3
+
+
+
+
+
+class comopt :
+
+
+  def __init__(ipse) :
+    import sys
+    ipse.argv =sys.argv[1:]
+    if len(ipse.argv) == 0 :
+      ipse.la ='$'
+    elif len(ipse.argv[0]) == 0 :
+      ipse.la =''
+    else :
+      ipse.la =ipse.argv[0][0]
+    ipse.argi =0
+    ipse.argj =0
+
+
+  def getc(ipse) :
+    c =ipse.la
+    if len(ipse.argv[ipse.argi]) == ipse.argj+1 :
+      ipse.argi +=1; ipse.argj =0
+      if len(ipse.argv) == ipse.argi :
+        ipse.la ='$'
+      else :
+        ipse.la ='' if len(ipse.argv[ipse.argi]) == 0 else ipse.argv[ipse.argi][0]
+    else :
+      ipse.argj +=1
+      ipse.la =ipse.argv[ipse.argi][ipse.argj]
+    return c
+
+
+  def getl(ipse, noinc=0) :
+    if noinc == 1 and ipse.argj == 0 :
+      return ''
+    if ipse.la == '$' :
+      return '$'
+    else :
+      l =ipse.argv[ipse.argi][ipse.argj:]
+    ipse.argi +=1; ipse.argj =0
+    if len(ipse.argv) == ipse.argi :
+      ipse.la ='$'
+    else :
+      ipse.la ='' if len(ipse.argv[ipse.argi]) == 0 else ipse.argv[ipse.argi][0]
+    return l
+
+
+  def error(ipse, msg='error') :
+    print('comopt : %s'%msg)
+
+
+  def __call__(ipse, opt={'flgs':'','args':[],'f':[],'j':[]}) :
+    lex =ipse
+    error =ipse.error
+    curcom ='--'
+    initopt =opt.copy()
+    com ={}
+    st =0
+    while st != 0 or lex.la != '$' :
+      if st == -2 :
+        if setoptf[0] == 'arg' :
+          if lex.la == '=' :
+            l =lex.getl()
+            opt[setoptf[1]].append(l[1:])
+          else :
+            opt['flgs'] +=setoptf[1]
+        st =0
+      elif st == -1 :
+        if setoptf[0] == 'comarg' :
+          l =lex.getl()
+          if l in ['--', 'python', 'vim'] :
+            if opt != initopt :
+              com[curcom] =opt
+            curcom =l
+            if curcom in com :
+              opt =com[curcom]
+            else :
+              opt =initopt.copy()
+          else :
+            opt[setoptf[1]].append(l[1:] if len(l) and l[0] == '=' else l)
+        elif setoptf[0] == 'arg' :
+          l =lex.getl()
+          opt[setoptf[1]].append(l[1:] if len(l) and l[0] == '=' else l)
+        elif setoptf[0] == 'flg' :
+          opt['flgs'] +=setoptf[1]
+          opt['flgs'] +=lex.getl(noinc=1)
+        st =0
+      elif st == 0 :
+        if lex.la == '-' :
+          st =1
+          lex.getc()
+        else :
+          setoptf =('comarg', 'args')
+          st =-1
+      elif st == 1 :
+        if lex.la == 'f' :
+          st =2
+          lex.getc()
+        elif lex.la == '-' :
+          st =3
+          lex.getc()
+        elif lex.la == 'n' :
+          st =16
+          lex.getc()
+        elif lex.la == 's' :
+          st =39
+          lex.getc()
+        elif lex.la == 'j' :
+          st =51
+          lex.getc()
+        elif lex.la == 't' :
+          st =55
+          lex.getc()
+        else :
+          error('non exspectato uso aborto')
+          return
+      elif st == 2 :
+        st =-1
+        setoptf =('arg', 'f')
+      elif st == 3 :
+        if lex.la == 'f' :
+          st =4
+          lex.getc()
+        elif lex.la == 'm' :
+          st =8
+          lex.getc()
+        elif lex.la == 'j' :
+          st =17
+          lex.getc()
+        elif lex.la == 'd' :
+          st =27
+          lex.getc()
+        elif lex.la == 'r' :
+          st =34
+          lex.getc()
+        elif lex.la == 's' :
+          st =40
+          lex.getc()
+        elif lex.la == 'q' :
+          st =46
+          lex.getc()
+        elif lex.la == 't' :
+          st =56
+          lex.getc()
+        else :
+          error('non exspectato uso aborto')
+          return
+      elif st == 4 :
+        if lex.la == 'i' :
+          st =5
+          lex.getc()
+        else :
+          error('non exspectato uso aborto')
+          return
+      elif st == 5 :
+        if lex.la == 'l' :
+          st =6
+          lex.getc()
+        else :
+          error('non exspectato uso aborto')
+          return
+      elif st == 6 :
+        if lex.la == 'e' :
+          st =7
+          lex.getc()
+        else :
+          error('non exspectato uso aborto')
+          return
+      elif st == 7 :
+        st =-1
+        setoptf =('arg', 'f')
+      elif st == 8 :
+        if lex.la == 'a' :
+          st =9
+          lex.getc()
+        else :
+          error('non exspectato uso aborto')
+          return
+      elif st == 9 :
+        if lex.la == 'k' :
+          st =10
+          lex.getc()
+        else :
+          error('non exspectato uso aborto')
+          return
+      elif st == 10 :
+        if lex.la == 'e' :
+          st =11
+          lex.getc()
+        else :
+          error('non exspectato uso aborto')
+          return
+      elif st == 11 :
+        if lex.la == 'f' :
+          st =12
+          lex.getc()
+        else :
+          error('non exspectato uso aborto')
+          return
+      elif st == 12 :
+        if lex.la == 'i' :
+          st =13
+          lex.getc()
+        else :
+          error('non exspectato uso aborto')
+          return
+      elif st == 13 :
+        if lex.la == 'l' :
+          st =14
+          lex.getc()
+        else :
+          error('non exspectato uso aborto')
+          return
+      elif st == 14 :
+        if lex.la == 'e' :
+          st =15
+          lex.getc()
+        else :
+          error('non exspectato uso aborto')
+          return
+      elif st == 15 :
+        st =-1
+        setoptf =('arg', 'f')
+      elif st == 16 :
+        st =-1
+        setoptf =('flg', 'n')
+      elif st == 17 :
+        if lex.la == 'u' :
+          st =18
+          lex.getc()
+        elif lex.la == 'o' :
+          st =52
+          lex.getc()
+        else :
+          error('non exspectato uso aborto')
+          return
+      elif st == 18 :
+        if lex.la == 's' :
+          st =19
+          lex.getc()
+        else :
+          error('non exspectato uso aborto')
+          return
+      elif st == 19 :
+        if lex.la == 't' :
+          st =20
+          lex.getc()
+        else :
+          error('non exspectato uso aborto')
+          return
+      elif st == 20 :
+        if lex.la == '-' :
+          st =21
+          lex.getc()
+        else :
+          error('non exspectato uso aborto')
+          return
+      elif st == 21 :
+        if lex.la == 'p' :
+          st =22
+          lex.getc()
+        else :
+          error('non exspectato uso aborto')
+          return
+      elif st == 22 :
+        if lex.la == 'r' :
+          st =23
+          lex.getc()
+        else :
+          error('non exspectato uso aborto')
+          return
+      elif st == 23 :
+        if lex.la == 'i' :
+          st =24
+          lex.getc()
+        else :
+          error('non exspectato uso aborto')
+          return
+      elif st == 24 :
+        if lex.la == 'n' :
+          st =25
+          lex.getc()
+        else :
+          error('non exspectato uso aborto')
+          return
+      elif st == 25 :
+        if lex.la == 't' :
+          st =26
+          lex.getc()
+        else :
+          error('non exspectato uso aborto')
+          return
+      elif st == 26 :
+        st =-1
+        setoptf =('flg', 'n')
+      elif st == 27 :
+        if lex.la == 'r' :
+          st =28
+          lex.getc()
+        else :
+          error('non exspectato uso aborto')
+          return
+      elif st == 28 :
+        if lex.la == 'y' :
+          st =29
+          lex.getc()
+        else :
+          error('non exspectato uso aborto')
+          return
+      elif st == 29 :
+        if lex.la == '-' :
+          st =30
+          lex.getc()
+        else :
+          error('non exspectato uso aborto')
+          return
+      elif st == 30 :
+        if lex.la == 'r' :
+          st =31
+          lex.getc()
+        else :
+          error('non exspectato uso aborto')
+          return
+      elif st == 31 :
+        if lex.la == 'u' :
+          st =32
+          lex.getc()
+        else :
+          error('non exspectato uso aborto')
+          return
+      elif st == 32 :
+        if lex.la == 'n' :
+          st =33
+          lex.getc()
+        else :
+          error('non exspectato uso aborto')
+          return
+      elif st == 33 :
+        st =-1
+        setoptf =('flg', 'n')
+      elif st == 34 :
+        if lex.la == 'e' :
+          st =35
+          lex.getc()
+        else :
+          error('non exspectato uso aborto')
+          return
+      elif st == 35 :
+        if lex.la == 'c' :
+          st =36
+          lex.getc()
+        else :
+          error('non exspectato uso aborto')
+          return
+      elif st == 36 :
+        if lex.la == 'o' :
+          st =37
+          lex.getc()
+        else :
+          error('non exspectato uso aborto')
+          return
+      elif st == 37 :
+        if lex.la == 'n' :
+          st =38
+          lex.getc()
+        else :
+          error('non exspectato uso aborto')
+          return
+      elif st == 38 :
+        st =-1
+        setoptf =('flg', 'n')
+      elif st == 39 :
+        st =-1
+        setoptf =('flg', 's')
+      elif st == 40 :
+        if lex.la == 'i' :
+          st =41
+          lex.getc()
+        else :
+          error('non exspectato uso aborto')
+          return
+      elif st == 41 :
+        if lex.la == 'l' :
+          st =42
+          lex.getc()
+        else :
+          error('non exspectato uso aborto')
+          return
+      elif st == 42 :
+        if lex.la == 'e' :
+          st =43
+          lex.getc()
+        else :
+          error('non exspectato uso aborto')
+          return
+      elif st == 43 :
+        if lex.la == 'n' :
+          st =44
+          lex.getc()
+        else :
+          error('non exspectato uso aborto')
+          return
+      elif st == 44 :
+        if lex.la == 't' :
+          st =45
+          lex.getc()
+        else :
+          error('non exspectato uso aborto')
+          return
+      elif st == 45 :
+        st =-1
+        setoptf =('flg', 's')
+      elif st == 46 :
+        if lex.la == 'u' :
+          st =47
+          lex.getc()
+        else :
+          error('non exspectato uso aborto')
+          return
+      elif st == 47 :
+        if lex.la == 'i' :
+          st =48
+          lex.getc()
+        else :
+          error('non exspectato uso aborto')
+          return
+      elif st == 48 :
+        if lex.la == 'e' :
+          st =49
+          lex.getc()
+        else :
+          error('non exspectato uso aborto')
+          return
+      elif st == 49 :
+        if lex.la == 't' :
+          st =50
+          lex.getc()
+        else :
+          error('non exspectato uso aborto')
+          return
+      elif st == 50 :
+        st =-1
+        setoptf =('flg', 's')
+      elif st == 51 :
+        st =-2
+        setoptf =('arg', 'j')
+      elif st == 52 :
+        if lex.la == 'b' :
+          st =53
+          lex.getc()
+        else :
+          error('non exspectato uso aborto')
+          return
+      elif st == 53 :
+        if lex.la == 's' :
+          st =54
+          lex.getc()
+        else :
+          error('non exspectato uso aborto')
+          return
+      elif st == 54 :
+        st =-2
+        setoptf =('arg', 'j')
+      elif st == 55 :
+        st =-1
+        setoptf =('flg', 't')
+      elif st == 56 :
+        if lex.la == 'o' :
+          st =57
+          lex.getc()
+        else :
+          error('non exspectato uso aborto')
+          return
+      elif st == 57 :
+        if lex.la == 'u' :
+          st =58
+          lex.getc()
+        else :
+          error('non exspectato uso aborto')
+          return
+      elif st == 58 :
+        if lex.la == 'c' :
+          st =59
+          lex.getc()
+        else :
+          error('non exspectato uso aborto')
+          return
+      elif st == 59 :
+        if lex.la == 'h' :
+          st =60
+          lex.getc()
+        else :
+          error('non exspectato uso aborto')
+          return
+      elif st == 60 :
+        st =-1
+        setoptf =('flg', 't')
+    com[curcom] =opt
+    return com
+
+
+def optutendi(nomen='', optargs=[('-f,--file,--makefile', '+f', 'Zuo'), ('-n,--just-print,--dry-run,--recon', 'n'), ('-s,--silent,--quiet', 's'), ('-j,--jobs=n', '*j'), ('-t,--touch', 't')], subcom=['--', 'python', 'vim']) :
+  lutendi =[]
+  for a in optargs :
+    if len(a) == 2 :
+      cmd,f =a
+      if "=" in cmd :
+        cmd,param =cmd.split("=")
+      else :
+        param ="a"
+    elif len(a) == 3 :
+      cmd,f,param =a
+    else :
+      raise Exception("imprevisum optarg : %s" % repr(a))
+    utendi ="  "
+    if f[0] == "+" :
+      utendi +=", ".join(c+"="+param for c in cmd.split(","))
+    elif f[0] == "*" :
+      utendi +=", ".join(c+"[="+param+"]" for c in cmd.split(","))
+    else :
+      utendi +=", ".join(cmd.split(","))
+    lutendi.append(utendi)
+  print('Modus utendi %s :' % nomen)
+  if subcom :
+    print('  <%s> ' % ', '.join(subcom))
+
+
+def comset() :
+  co =comopt()
+  return co()
+
+comset =comset()
+if '--' in comset :
+  zuo_main(comset['--'])
+if 'python' in comset :
+  zuo_py(comset['python'])
+if 'vim' in comset :
+  zuo_vim(comset['vim'])
+
